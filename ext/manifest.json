@@ -44,15 +44,30 @@
     },
     "mute": {
       "description": "Mute",
-      "suggested_key": {
-        "default": "Ctrl+Shift+M"
-      },
       "global": true
     },
     "unmute": {
       "description": "Unmute",
+      "global": true
+    },
+    "toggle_video": {
+      "description": "Toggle Video",
       "suggested_key": {
-        "default": "Ctrl+Shift+B"
+        "default": "MacCtrl+Shift+D"
+      },
+      "global": true
+    },
+    "hangup": {
+      "description": "Hangup",
+      "suggested_key": {
+        "default": "MacCtrl+Shift+H"
+      },
+      "global": true
+    },
+    "switch_back": {
+      "description": "Switch back to Meet tab",
+      "suggested_key": {
+        "default": "MacCtrl+Shift+B"
       },
       "global": true
     }

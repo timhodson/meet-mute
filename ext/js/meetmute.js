@@ -1,4 +1,23 @@
-const MUTE_BUTTON = 'div[role="button"][aria-label*="microphone"][data-is-muted]'
+console.log("Meet mute loading");
+
+const MUTE_BUTTON = 'div[role="button"][aria-label*="microphone"][data-is-muted]';
+const CAMERA_BUTTON = 'div[role="button"][aria-label*="camera"][data-is-muted]';
+const muteToggleKeyDownEvent = new KeyboardEvent('keydown', {
+  "key": "d",
+  "code": "KeyD",
+  "metaKey": true,
+  "charCode": 100,
+  "keyCode": 100,
+  "which": 100
+})
+const cameraToggleKeyDownEvent = new KeyboardEvent('keydown', {
+  "key": "e",
+  "code": "KeyE",
+  "metaKey": true,
+  "charCode": 69,
+  "keyCode": 69,
+  "which": 69
+})
 
 const waitUntilElementExists = (DOMSelector, MAX_TIME = 5000) => {
   let timeout = 0
@@ -21,106 +40,180 @@ const waitUntilElementExists = (DOMSelector, MAX_TIME = 5000) => {
   })
 }
 
-var waitingForMuteButton = false
+var bodyClassListener = (function () {
+  var callbacks = [];
+  var bodyClassObserver;
 
-function waitForMuteButton() {
-  if (waitingForMuteButton) {
-    return
-  }
-  waitingForMuteButton = true
-  waitUntilElementExists(MUTE_BUTTON)
-    .then((el) => {
-      waitingForMuteButton = false
-      updateMuted()
-      watchIsMuted(el)
+  function registerListener() {
+    bodyClassObserver = new MutationObserver((mutations) => {
+      let newClass = mutations[0].target.getAttribute('class')
+      if (mutations[0].oldValue != newClass) 
+        callbacks.forEach(fn => fn());
     })
-    .catch((error) => {
-      chrome.extension.sendMessage({ message: 'disconnected' })
+
+    bodyClassObserver.observe(document.querySelector('body'), {
+      attributes: true, 
+      attributeFilter: ['class'],
+      attributeOldValue: true
     })
-}
-
-var muted = false
-
-function isMuted() {
-  let dataIsMuted = document.querySelector(MUTE_BUTTON)
-      .getAttribute('data-is-muted')
-  return dataIsMuted == 'true'
-}
-
-function updateMuted(newValue) {
-  muted = newValue || isMuted()
-  chrome.extension.sendMessage({ message: muted ? 'muted' : 'unmuted' })
-}
-
-var isMutedObserver
-
-function watchIsMuted(el) {
-  if (isMutedObserver) {
-    isMutedObserver.disconnect()
+    console.log("Loaded body class mutation observer");
   }
-  isMutedObserver = new MutationObserver((mutations) => {
-    let newValue = mutations[0].target.getAttribute('data-is-muted') == 'true'
 
-    if (newValue != muted) {
-      updateMuted(newValue)
+  function addCallback(fn) {
+    callbacks.push(fn);
+    if (callbacks.length == 1)
+      registerListener();
+    return;
+  }
+
+  function removeCallback(find_fn) {
+    callbacks = callbacks.filter((fn, id) => fn != find_fn);
+    console.log("Remove callback", find_fn, callbacks.length, callbacks);
+    if (callbacks.length == 0 && bodyClassObserver) {
+      console.log("Disconnecting from body class listening");
+      bodyClassObserver.disconnect();
     }
-  })
-  isMutedObserver.observe(el, {
-    attributes: true, 
-    attributeFilter: ['data-is-muted']
-  })
-}
+  }
 
-function watchBodyClass() {
-  const bodyClassObserver = new MutationObserver((mutations) => {
-    let newClass = mutations[0].target.getAttribute('class')
-    if (mutations[0].oldValue != newClass) {
-      waitForMuteButton()
+  return {addCallback: addCallback, removeCallback: removeCallback};
+})();
+
+var buttonWatcher = function (selector, type, keyToggle) {
+  var waitingForButton = false
+  var muted = false
+  var isMutedObserver
+
+  function watchIsMuted(el) {
+    if (isMutedObserver) {
+      isMutedObserver.disconnect()
     }
-  })
-  bodyClassObserver.observe(document.querySelector('body'), {
-    attributes: true, 
-    attributeFilter: ['class'],
-    attributeOldValue: true
-  })
-}
+    isMutedObserver = new MutationObserver((mutations) => {
+      let newValue = mutations[0].target.getAttribute('data-is-muted') == 'true'
 
-watchBodyClass()
+      if (newValue != muted) {
+        updateMuted(newValue)
+      }
+    })
+    isMutedObserver.observe(el, {
+      attributes: true, 
+      attributeFilter: ['data-is-muted']
+    })
+    console.log("Mutation observer", el);
+  }
 
-window.onbeforeunload = (event) => {
-  chrome.extension.sendMessage({ message: 'disconnected' })
-}
+  function disconnect() {
+    if (isMutedObserver)
+      isMutedObserver.disconnect();
+    console.log("Dropping message listener");
+    chrome.runtime.onMessage.removeListener(messageListener);
+  }
 
-chrome.runtime.onMessage.addListener(
-  (request, sender, sendResponse) => {
+  function updateMuted(newValue) {
+    muted = newValue || isMuted()
+    console.log("Muted now", muted, type);
+    if (type == 'mute')
+      chrome.extension.sendMessage({ mute: muted ? 'muted' : 'unmuted' })
+  }
+
+  function isMuted() {
+    let dataIsMuted = document.querySelector(selector)
+        .getAttribute('data-is-muted')
+    return dataIsMuted == 'true'
+  }
+
+  function sendKeyboardCommand() {
+    document.dispatchEvent(keyToggle)
+  }
+
+  function waitFor() {
+    console.log("Trying to wait for button");
+    if (waitingForButton) {
+      return
+    }
+    waitingForButton = true
+    console.log("Waiting for button");
+    waitUntilElementExists(selector)
+      .then((el) => {
+        console.log("Found button", el);
+        waitingForButton = false
+        updateMuted()
+        watchIsMuted(el)
+      })
+      .catch((error) => {
+        console.log("Error watching button", error);
+        chrome.extension.sendMessage({ message: 'disconnected' })
+      })
+  }
+  
+  function messageListener(request, sender, sendResponse) {
+    console.log("Got message", request, type);
     muted = isMuted()
-    if (request && request.command && request.command === 'toggle_mute') {
+    if (request && request.command && request.command === 'toggle_' + type) {
       muted = !muted
       sendKeyboardCommand()
-    } else if (request && request.command && request.command === 'mute') {
+    } else if (request && request.command && request.command === type) {
       if (!muted) {
         muted = !muted
         sendKeyboardCommand()
       }
-    } else if (request && request.command && request.command === 'unmute') {
+    } else if (request && request.command && request.command === 'un' + type) {
       if (muted) {
         muted = !muted
         sendKeyboardCommand()
       }
     }
 
-    sendResponse({ message: muted ? 'muted' : 'unmuted' });
-  })
+    if (type == 'mute')
+      sendResponse({ mute: muted ? 'muted' : 'unmuted' });
+  }
 
-const keydownEvent = new KeyboardEvent('keydown', {
-  "key": "d",
-  "code": "KeyD",
-  "metaKey": true,
-  "charCode": 100,
-  "keyCode": 100,
-  "which": 100
-})
+  console.log("Listening for messages", type);
+  chrome.runtime.onMessage.addListener(messageListener);
 
-function sendKeyboardCommand() {
-  document.dispatchEvent(keydownEvent)
+  waitFor();
+  return {waitFor: waitFor, disconnect: disconnect};
+};
+
+window.onbeforeunload = (event) => {
+  try {
+    chrome.extension.sendMessage({ message: 'disconnected' })
+  } catch (e) {
+    /* The extension context is often invalidated by the time this event 
+     * fires */
+    console.log("Cannot send final disconnect message", e);
+  }
 }
+
+var mainProcess = (function () {
+  var watchers = [buttonWatcher(MUTE_BUTTON, "mute", muteToggleKeyDownEvent), 
+                  buttonWatcher(CAMERA_BUTTON, "video", cameraToggleKeyDownEvent)];
+  var bodyListeners = watchers.map(watcher => { var fn = () => watcher.waitFor(); bodyClassListener.addCallback(fn); return fn; });
+
+  function disconnect() {
+    console.log("Disconnecting");
+    bodyListeners.forEach(listener => bodyClassListener.removeCallback(listener));
+    watchers.forEach(watcher => watcher.disconnect());
+    watchers = [];
+    chrome.runtime.onMessage.removeListener(disconnectAndHangupListener);
+  }
+
+  function disconnectAndHangupListener(request, sender, sendResponse) {
+    if (request.command == "disconnect") 
+      disconnect();
+    else if (request.command == "hangup") {
+      var hangup = document.querySelector("[aria-label='Leave call']")
+      if (hangup)
+        hangup.dispatchEvent(new MouseEvent("click", {view: window, bubbles: true, cancelable: true}))
+    }
+  }
+
+  console.log("Listening for disconnects");
+  chrome.extension.onMessage.addListener(disconnectAndHangupListener);
+  chrome.runtime.connect().onDisconnect.addListener(function() {
+    // Clean up when content script gets disconnected
+    console.log("Parent extension gone, disconnecting", chrome.runtime.lastError);
+    disconnect();
+  })
+  return {watchers: watchers};
+})();
+

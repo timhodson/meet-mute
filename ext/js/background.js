@@ -1,44 +1,58 @@
+var connectionListener = (function () { 
+  var openPorts = 0;
+  chrome.runtime.onConnect.addListener(function(port) {
+    openPorts += 1;
+    console.log('Port connected', port, openPorts, chrome.runtime.lastError);
+    port.onDisconnect.addListener(function () {
+      openPorts -= 1;
+      console.log('Port disconnected', openPorts);
+      if (openPorts == 0)
+        setIcon('disconnected');
+    });
+  });
+})();
+
 chrome.commands.onCommand.addListener((command) => {
-  handleCommand(command)
+  if (command == "switch_back")
+    getGoogleMeetTabs().then(tabs => { if (tabs.length) {
+      chrome.windows.update(tabs[0].windowId, {focused: true});
+      chrome.tabs.update(tabs[0].id, {active: true});
+    }});
+  else
+    handleInTabCommand(command)
 })
 
 chrome.runtime.onMessage.addListener(
   (request, sender, sendResponse) => {
-    if (request.hasOwnProperty('message')) {
-      setIcon(request.message)
+    if (request.hasOwnProperty('mute')) {
+      setIcon(request.mute)
     }
   })
 
 chrome.browserAction.onClicked.addListener((tab) => {
-  handleCommand('toggle_mute')
+  handleInTabCommand('toggle_mute')
 })
 
-function handleCommand(command) {
-  chrome.windows.getAll({ populate: true }, windowList => {
-    let googleMeetTabs = getGoogleMeetTabs(windowList)
+// For any existing Google Meet tabs on reload inject the script 
+getGoogleMeetTabs().then(tabs => {
+  tabs.forEach(tab => {
+    chrome.tabs.executeScript(tab.id, {file: '/js/meetmute.js'});
+  });
+}); 
 
-    if (googleMeetTabs.length > 0) {
-      processCommand(command, googleMeetTabs)
-    }
-  })
+function handleInTabCommand(command) {
+  getGoogleMeetTabs().then(tabs => { if (tabs.length) processCommand(command, tabs) });
 }
 
 function getGoogleMeetTabs(windowList) {
-  let googleMeetTabs = []
-  windowList.forEach(w => {
-    w.tabs.forEach(tab => {
-      if (tab && tab.url && tab.url.startsWith('https://meet.google.com/')) {
-        googleMeetTabs.push(tab)
-      }
-    })
-  })
-  return googleMeetTabs
+  return new Promise(accept => chrome.tabs.query({url: "https://meet.google.com/*"}, accept));
 }
 
 function processCommand(command, googleMeetTabs) {
   googleMeetTabs.forEach((tab) => {
-    chrome.tabs.sendMessage(tab.id, { command: command }, (response) => {
-      setIcon(response.message)
+    chrome.tabs.sendMessage(tab.id, { command: command }, response => {
+      if (response)
+        setIcon(response.mute)
     })
   })
 }
