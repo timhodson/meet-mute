@@ -19,6 +19,9 @@ const cameraToggleKeyDownEvent = new KeyboardEvent('keydown', {
   "which": 69
 })
 
+// const debugLog = (...arg) => console.log(...arg);
+const debugLog = () => { return };
+
 const waitUntilElementExists = (DOMSelector, MAX_TIME = 5000) => {
   let timeout = 0
 
@@ -56,7 +59,7 @@ var bodyClassListener = (function () {
       attributeFilter: ['class'],
       attributeOldValue: true
     })
-    console.log("Loaded body class mutation observer");
+    debugLog("Loaded body class mutation observer");
   }
 
   function addCallback(fn) {
@@ -68,9 +71,9 @@ var bodyClassListener = (function () {
 
   function removeCallback(find_fn) {
     callbacks = callbacks.filter((fn, id) => fn != find_fn);
-    console.log("Remove callback", find_fn, callbacks.length, callbacks);
+    debugLog("Remove callback", find_fn, callbacks.length, callbacks);
     if (callbacks.length == 0 && bodyClassObserver) {
-      console.log("Disconnecting from body class listening");
+      debugLog("Disconnecting from body class listening");
       bodyClassObserver.disconnect();
     }
   }
@@ -98,19 +101,19 @@ var buttonWatcher = function (selector, type, keyToggle) {
       attributes: true, 
       attributeFilter: ['data-is-muted']
     })
-    console.log("Mutation observer", el);
+    debugLog("Mutation observer", el);
   }
 
   function disconnect() {
     if (isMutedObserver)
       isMutedObserver.disconnect();
-    console.log("Dropping message listener");
+    debugLog("Dropping message listener");
     chrome.runtime.onMessage.removeListener(messageListener);
   }
 
   function updateMuted(newValue) {
     muted = newValue || isMuted()
-    console.log("Muted now", muted, type);
+    debugLog("Muted now", muted, type);
     if (type == 'mute')
       chrome.extension.sendMessage({ mute: muted ? 'muted' : 'unmuted' })
   }
@@ -126,27 +129,27 @@ var buttonWatcher = function (selector, type, keyToggle) {
   }
 
   function waitFor() {
-    console.log("Trying to wait for button");
+    debugLog("Trying to wait for button");
     if (waitingForButton) {
       return
     }
     waitingForButton = true
-    console.log("Waiting for button");
+    debugLog("Waiting for button");
     waitUntilElementExists(selector)
       .then((el) => {
-        console.log("Found button", el);
+        debugLog("Found button", el);
         waitingForButton = false
         updateMuted()
         watchIsMuted(el)
       })
       .catch((error) => {
-        console.log("Error watching button", error);
+        debugLog("Error watching button", error);
         chrome.extension.sendMessage({ message: 'disconnected' })
       })
   }
   
   function messageListener(request, sender, sendResponse) {
-    console.log("Got message", request, type);
+    debugLog("Got message", request, type);
     muted = isMuted()
     if (request && request.command && request.command === 'toggle_' + type) {
       muted = !muted
@@ -167,7 +170,7 @@ var buttonWatcher = function (selector, type, keyToggle) {
       sendResponse({ mute: muted ? 'muted' : 'unmuted' });
   }
 
-  console.log("Listening for messages", type);
+  debugLog("Listening for messages", type);
   chrome.runtime.onMessage.addListener(messageListener);
 
   waitFor();
@@ -180,7 +183,7 @@ window.onbeforeunload = (event) => {
   } catch (e) {
     /* The extension context is often invalidated by the time this event 
      * fires */
-    console.log("Cannot send final disconnect message", e);
+    debugLog("Cannot send final disconnect message", e);
   }
 }
 
@@ -190,7 +193,7 @@ var mainProcess = (function () {
   var bodyListeners = watchers.map(watcher => { var fn = () => watcher.waitFor(); bodyClassListener.addCallback(fn); return fn; });
 
   function disconnect() {
-    console.log("Disconnecting");
+    debugLog("Disconnecting");
     bodyListeners.forEach(listener => bodyClassListener.removeCallback(listener));
     watchers.forEach(watcher => watcher.disconnect());
     watchers = [];
@@ -207,11 +210,11 @@ var mainProcess = (function () {
     }
   }
 
-  console.log("Listening for disconnects");
+  debugLog("Listening for disconnects");
   chrome.extension.onMessage.addListener(disconnectAndHangupListener);
   chrome.runtime.connect().onDisconnect.addListener(function() {
     // Clean up when content script gets disconnected
-    console.log("Parent extension gone, disconnecting", chrome.runtime.lastError);
+    debugLog("Parent extension gone, disconnecting", chrome.runtime.lastError);
     disconnect();
   })
   return {watchers: watchers};

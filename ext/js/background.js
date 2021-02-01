@@ -54,6 +54,8 @@ function processCommand(command, googleMeetTabs) {
       if (response)
         setIcon(response.mute)
     })
+    if (chrome.runtime.lastMessage)
+      console.log(`Tab ${tab.id} disconnected`, chrome.runtime.lastMessage);
   })
 }
 
