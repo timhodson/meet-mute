@@ -1,7 +1,7 @@
 console.log("Meet mute loading");
 
-const MUTE_BUTTON = 'div[role="button"][aria-label*="microphone"][data-is-muted]';
-const CAMERA_BUTTON = 'div[role="button"][aria-label*="camera"][data-is-muted]';
+const MUTE_BUTTON = '[role="button"][aria-label*="microphone"][data-is-muted]';
+const CAMERA_BUTTON = '[role="button"][aria-label*="camera"][data-is-muted]';
 const muteToggleKeyDownEvent = new KeyboardEvent('keydown', {
   "key": "d",
   "code": "KeyD",
